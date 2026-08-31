@@ -22,6 +22,30 @@ import math
 import torch
 
 
+def _resolve_encode_ref_audio(native):
+    """Return ComfyUI's reference-audio encoder across core layouts.
+
+    ComfyUI 0.33.0 exposed the helper at module level, while 0.33.1 moved it
+    onto ``MiniMaxH3ReferenceToVideo``. Resolve lazily so accessing a missing
+    class attribute cannot break versions where the module-level helper is
+    already available.
+    """
+    encode_ref_audio = getattr(native, "_encode_ref_audio", None)
+    if callable(encode_ref_audio):
+        return encode_ref_audio
+
+    reference_node = getattr(native, "MiniMaxH3ReferenceToVideo", None)
+    encode_ref_audio = getattr(reference_node, "_encode_ref_audio", None)
+    if callable(encode_ref_audio):
+        return encode_ref_audio
+
+    raise AttributeError(
+        "ComfyUI exposes no compatible MiniMax H3 reference-audio encoder "
+        "(expected comfy_extras.nodes_minimax_h3._encode_ref_audio or "
+        "MiniMaxH3ReferenceToVideo._encode_ref_audio)"
+    )
+
+
 def _context_span(n_frames):
     """Cursor-axis duration spanned by n_frames trailing latent frames ending
     at a target origin -- pure position math, no model weights involved."""
@@ -82,7 +106,7 @@ def _build_ref_blocks(vae, audio_vae, width, height, frame_count, ref_image_size
     CANVAS_MULTIPLE = 32
     REF_IMAGE_SHORT_EDGE = 2048
     FPS = 24
-    encode_ref_audio = native._encode_ref_audio
+    encode_ref_audio = _resolve_encode_ref_audio(native)
 
     ref_items = []
     ref_blocks = []
